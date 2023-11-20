@@ -1,0 +1,10 @@
+md 0x4e2c 1
+mw 0x4e2c 1400002a
+md 0x4e2c 1
+go 0x0
+
+glitch again
+
+imgread kernel recovery 0x01080000
+md.b 0x01080000 500
+bootm 0x01080000

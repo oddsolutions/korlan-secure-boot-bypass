@@ -1,0 +1,7 @@
+md 0x30edc 2
+mw 0x30edc d503201f
+md 0x30edc 2
+go 0x0
+<glitch again>
+setenv bootargs console=ttyS0,115200 earlycon=aml-uart,0xfe002000,115200 rootfstype=ramfs init=/init loglevel=7 ${bootargs}
+boot

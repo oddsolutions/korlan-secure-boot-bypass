@@ -1,0 +1,8 @@
+md 0x4e30 1
+mw 0x4e30 d503201f
+md 0x4e30 1
+go 0x0
+
+glitch again
+
+run recovery_from_udisk
