@@ -1,0 +1,46 @@
+mkdir split
+
+dd if=nand_MT29F1G01_0.bin of=split/bl.bin bs=1 count=14680064
+dd if=nand_MT29F1G01_0.bin of=split/tpl.bin bs=1 skip=14680064 count=2097152
+dd if=nand_MT29F1G01_0.bin of=split/fts.bin bs=1 skip=16777216 count=1048576
+dd if=nand_MT29F1G01_0.bin of=split/factory.bin bs=1 skip=17825792 count=4194304
+dd if=nand_MT29F1G01_0.bin of=split/recovery.bin bs=1 skip=22020096 count=12582912
+dd if=nand_MT29F1G01_0.bin of=split/boot.bin bs=1 skip=34603008 count=12582912
+dd if=nand_MT29F1G01_0.bin of=split/system.bin bs=1 skip=47185920 count=31457280
+dd if=nand_MT29F1G01_0.bin of=split/cache.bin bs=1 skip=78643200 count=55574528
+
+
+
+sudo unsquashfs system.img
+
+sudo mksquashfs squashfs-root test3.img
+
+
+$ stat system.img
+  File: system.img
+  Size: 31457280        Blocks: 61440      IO Block: 4096   regular file
+Device: 902h/2306d      Inode: 132187835   Links: 1
+Access: (0644/-rw-r--r--)  Uid: ( 1001/    osom)   Gid: ( 1001/    osom)
+Access: 2023-11-09 16:18:10.009928486 +0100
+Modify: 2023-11-09 16:17:35.074162101 +0100
+Change: 2023-11-09 16:18:03.145974271 +0100
+ Birth: 2023-11-09 16:17:35.066162155 +0100
+
+
+$ stat test3.img
+  File: test3.img
+  Size: 22253568        Blocks: 43464      IO Block: 4096   regular file
+Device: 902h/2306d      Inode: 132188845   Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2023-11-09 19:23:44.214349484 +0100
+Modify: 2023-11-09 19:22:35.826766207 +0100
+Change: 2023-11-09 19:22:35.826766207 +0100
+ Birth: 2023-11-09 19:22:35.566767792 +0100
+
+
+31457280 - 22253568 = 9203712
+
+
+dd if=/dev/zero ibs=1 count=9203712 | LC_ALL=C tr "\000" "\377" >padding.bin
+
+cat test3.img padding.bin > testsystem.img
