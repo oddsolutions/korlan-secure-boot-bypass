@@ -1,0 +1,12 @@
+# mount_point    fstype    device
+/cache           ubifs     cache
+# In Biggie, /data/ points to a subdirectory of /cache/. For recovery,
+# simply point /data/ to data device. Recovery logic 'just works'
+# because we don't really care to differentiate between /cache/
+# and /data/ for recovery cases, like FDR.
+/data            ubifs     cache
+/system          mtd       system
+/boot            mtd       boot
+/recovery        mtd       recovery
+/logo            mtd       logo
+/bootloader      mtd       bootloader

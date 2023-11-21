@@ -1,0 +1,68 @@
+# Certain modifications to this file must be made in berlin/init.rc!
+# TODO(bryaneyler): Unify this script with berlin/init.rc.
+
+on early-init
+    start ueventd
+    loglevel 3
+
+    # mount tmpfs on tmp and limit /dev size
+    mount tmpfs tmpfs /tmp size=400m
+    mount tmpfs tmpfs /dev remount size=4m
+
+on init
+    export PATH /sbin:/bin
+    export LD_LIBRARY_PATH /system/vendor/lib:/system/lib:/usr/lib:/lib
+
+    mount tmpfs tmpfs /mnt size=8m
+
+    mkdir /cache 0700 root root
+    mkdir /factory 0700 root root
+    mkdir /data 0700 root root
+    mkdir /data/chrome 0770 chrome shell
+
+    mkdir /dev/shm
+    mount tmpfs tmpfs /dev/shm size=32m
+
+    mkdir /dev/dri
+    symlink /dev/card0 /dev/dri/card0
+
+    # Disable kernel module loading after loading all the necessary modules
+    # insert_modules.sh is used by others so better to disable outside the
+    # scripts
+    write /proc/sys/kernel/modules_disabled 1
+
+    exec /sbin/ubiattach /dev/ubi_ctrl -m 7 -d 7 -b 20
+    mount ubifs ubi7:cache /cache rw nosuid nodev noatime
+
+    exec /sbin/ubiattach /dev/ubi_ctrl -m 3 -d 3 -b 2
+    mount ubifs ubi3:factory /factory ro nosuid nodev noatime
+
+on boot
+    start logd
+
+    start console
+
+    class_start default
+
+    start recovery
+
+service ueventd /sbin/ueventd
+    critical
+
+service recovery /bin/logwrapper /sbin/recovery
+    class service
+
+on property:ro.debuggable=0
+    stop console
+
+on property:ro.debuggable=1
+    start console
+
+service logd /bin/logd
+    class service
+    socket logd stream 666 logd logd
+    socket logdr seqpacket 666 logd logd
+    socket logdw dgram 222 logd logd
+    capabilities SYSLOG AUDIT_CONTROL SETGID SETUID
+    user logd
+    group logd system package_info readproc
