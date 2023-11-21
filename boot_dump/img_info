@@ -1,0 +1,12 @@
+kernel=kernel
+ramdisk=ramdisk
+page_size=2048
+kernel_size=5930945
+ramdisk_size=1686340
+base_addr=0x01078000
+kernel_offset=0x00008000
+ramdisk_offset=0xfff88000
+tags_offset=0xfef88100
+cmd_line='rootfstype=ramfs init=/init no_console_suspend quiet loglevel=3 ramoops.pstore_en=1 ramoops.record_size=0x8000 ramoops.console_size=0x4000 selinux=1 enforcing=0 console= mtdblock.ro_fspart="system" ro nooverlayfs logcat_buffer_sizes=1024,2,2,32'
+board=""
+format=xz

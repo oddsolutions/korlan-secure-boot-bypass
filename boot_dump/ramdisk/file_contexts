@@ -1,0 +1,108 @@
+#line 1 "vendor/eureka/selinux/file_contexts_cast"
+# RAMDISK, which doesn't support extended attributes.
+# All files on the RAMDISK inherit their label from the root inode, which is
+# set via the policy via a genfscon rule.  Individual files can be set
+# correctly at runtime via restorecon in init.rc:
+# Notes:
+#  - rootfs (and others) follows the convention from Android. The type is
+#     used to label both the filesystems and the files for virtual filesystems
+#  - 
+/							u:object_r:rootfs
+/(?!(system\.ro|factory|dev|sys|proc)).*		u:object_r:rootfs
+/init							u:object_r:init_exec
+/sbin/adbd						u:object_r:adbd_exec
+/sbin/busybox						u:object_r:busybox_exec
+
+# Factory - Only ever mounted as read-only. Keep as unlabeled.
+/factory(/.*)?						u:object_r:unlabeled
+
+# Cache/data - must be relabeled after we switch selinux to enabled
+# recovery directory must be relabeled on each reboot in case of ota.
+# The crash partition is used by gwifi.
+/(data|cache|crash)(/.*)?				u:object_r:data_file
+/cache/.system.overlay(/.*)?    			u:object_r:system_file
+/cache/.system.work(/.*)?    				u:object_r:system_file
+
+# tmpfs based filesystems - These are labeled on the fs level.
+# See filesystems. We make sure they are labeled properly.
+/(data|cache/.data)/chrome/metrics(/.*)?		u:object_r:tmpfs
+/(data|cache/.data)/share/chrome/metrics(/.*)?		u:object_r:tmpfs
+/(data|cache/.data)/chrome/tmp(/.*)?			u:object_r:tmpfs
+/tmp(/.*)?						u:object_r:tmpfs
+
+# System - this is burned into the ro fs on build:
+# Note that the context is dependant on the actual file, not the link.
+/system(/.*)?						u:object_r:system_file
+/system/bin/alsactl					u:object_r:alsactl_exec
+/system/bin/amixer					u:object_r:amixer_exec
+/system/bin/aplay					u:object_r:aplay_exec
+/system/bin/ash						u:object_r:sh_exec
+/system/bin/autolog					u:object_r:autolog_exec
+/system/bin/boot_animation				u:object_r:boot_animation_exec
+/system/bin/busybox					u:object_r:busybox_exec
+/system/bin/curl					u:object_r:curl_exec
+/system/bin/dhcpcd					u:object_r:dhcpcd_exec
+/system/bin/logrewind					u:object_r:iot_exec
+/system/bin/logwrapper					u:object_r:execwrapper_exec
+/system/bin/cgroup-wrapper				u:object_r:execwrapper_exec
+/system/bin/cgroup-metricsd				u:object_r:iot_exec
+/system/bin/modular_updater				u:object_r:modular_updater_exec
+/system/bin/ncp_spi_loader 				u:object_r:gwifi_exec
+/system/bin/net_mgr                                     u:object_r:net_mgr_exec
+/system/bin/nldaemon                                    u:object_r:nldaemon_exec
+/system/bin/nlspi_daemon				u:object_r:iot_exec
+/system/bin/nlspi_client				u:object_r:nlspi_client_exec
+/system/bin/otbr-agent 					u:object_r:gwifi_exec
+/system/bin/process_monitor				u:object_r:process_monitor_exec
+/system/bin/retail_demo					u:object_r:retail_demo_exec
+/system/bin/setup_heater_pwm.sh				u:object_r:iot_power_exec
+/system/bin/sntpd					u:object_r:sntpd_exec
+/system/bin/sysmond					u:object_r:sysmond_exec
+/system/bin/thermal_governor_common			u:object_r:thermal_governor_exec
+/system/bin/thermal_governor_v2  			u:object_r:thermal_governor_exec
+/system/bin/toolbox					u:object_r:toolbox_exec
+/system/bin/toybox					u:object_r:toolbox_exec
+/system/bin/update_engine				u:object_r:update_engine_exec
+/system/bin/update_engine_sideload			u:object_r:update_engine_exec
+/system/bin/update_engine_client			u:object_r:icli_exec
+/system/bin/watchdog					u:object_r:watchdog_exec
+/system/bin/wpa_supplicant				u:object_r:wpa_supplicant_exec
+/system/chrome/cast_cli					u:object_r:cast_cli_exec
+/system/chrome/cast_shell				u:object_r:cast_exec
+/system/chrome/crash_uploader				u:object_r:crash_uploader_exec
+/system/chrome/dumpstate				u:object_r:dumpstate_exec
+/system/chrome/process_manager				u:object_r:cast_process_manager_exec
+/system/chrome/update_engine				u:object_r:update_engine_exec
+/system/chrome/bin/.*					u:object_r:iot_exec
+/system/chrome/bin/iot_audio				u:object_r:iot_audio_exec
+/system/chrome/bin/iot_audio_capture			u:object_r:iot_audio_exec
+/system/chrome/bin/icli					u:object_r:icli_exec
+/system/chrome/bin/iot_3a                               u:object_r:iot_3a_exec
+/system/chrome/bin/iot_accessory_manager		u:object_r:iot_accessory_manager_exec
+/system/chrome/bin/iot_button				u:object_r:iot_button_exec
+/system/chrome/bin/iot_camera				u:object_r:iot_camera_exec
+/system/chrome/bin/iot_hw_ux_manager			u:object_r:iot_hw_ux_manager_exec
+/system/chrome/bin/iot_led				u:object_r:iot_led_exec
+/system/chrome/bin/iot_mdd				u:object_r:iot_mdd_exec
+/system/chrome/bin/iot_nldaemon				u:object_r:iot_nldaemon_exec
+/system/chrome/bin/iot_power				u:object_r:iot_power_exec
+/system/chrome/bin/iot_power_check			u:object_r:iot_power_exec
+/system/chrome/bin/iot_combo				u:object_r:iot_combo_exec
+/system/chrome/bin/iot_reboot_cli			u:object_r:iot_reboot_cli_exec
+/system/chrome/bin/iot_reconnect			u:object_r:iot_reconnect_exec
+/system/chrome/bin/iot_led_cli				u:object_r:icli_exec
+/system/chrome/bin/standalone_mojo_broker		u:object_r:mojo_broker_exec
+/system/etc/model_common.key				u:object_r:model_common_key
+/system/gwifi/bin/.*					u:object_r:gwifi_exec
+/system/usr/bin/dropbearmulti				u:object_r:sshd_exec
+
+# VirtualFS - labeled by genenforce on the entire filesystems.
+# See the filesystems policy file for details over how these are labeled.
+# This includes /sys, /proc, and most of /dev
+
+# Specific Devices we want to limit access to:
+/dev/video[0-9]*	u:object_r:camera_device
+/dev/audio.*		u:object_r:audio_device
+/dev/eac		u:object_r:audio_device
+/dev/snd(/.*)?		u:object_r:audio_device
+/dev/spdif_out.*	u:object_r:audio_device

@@ -1,0 +1,686 @@
+# AUTO GENERATED do not edit. Generate instead with with init_gen.sh
+import early_load_ko.rc
+
+on early-init
+    # RAMFS doesn't support extended attributes, so its files will have
+    # incorrect labels.  Cleanup the labels:
+    restorecon /init
+    restorecon /sbin/adbd
+    restorecon /sbin/busybox
+    # Transition to init domain:
+    setcon u:r:init
+
+    # Mount cgroups
+    mkdir /sys/fs/cgroup
+    mount tmpfs tmpfs /sys/fs/cgroup nodev noexec nosuid
+    # cpu controller
+    mkdir /sys/fs/cgroup/cpu
+    mount cgroup cgroup /sys/fs/cgroup/cpu cpu
+    # cpuacct, memory controller
+    mkdir /sys/fs/cgroup/memcpuacct
+    mount cgroup cgroup /sys/fs/cgroup/memcpuacct cpuacct,memory
+    write /sys/fs/cgroup/memcpuacct/memory.use_hierarchy "1"
+    mkdir /sys/fs/cgroup/memcpuacct/system
+    mkdir /sys/fs/cgroup/memcpuacct/iot
+    # Allow Chrome to manage its Cgroup.
+    chown chrome chrome /sys/fs/cgroup/memcpuacct/iot/cgroup.procs
+
+    chown root chrome /sbin/dockd
+    chmod 0755 /sbin/dockd
+    chown root chrome /sbin/usb_gadget_control
+    chmod 04755 /sbin/usb_gadget_control
+
+    # Move init to the system cgroup.  Do this before launching any processes
+    # so that all children processes inherit init's cgroup.
+    write /sys/fs/cgroup/memcpuacct/system/cgroup.procs "1"
+
+    start ueventd
+
+    mount tmpfs tmpfs /tmp nodev noexec nosuid size=32m
+
+    # we already have /dev mounted
+    mount tmpfs tmpfs /dev noexec remount size=4m
+
+    # set core dump size limit to unlimited
+    # core dump will be generated in /data/coredump/
+    # if the directory exists and writable
+    setrlimit 4  -1 -1
+    write /proc/sys/kernel/core_pattern "|/bin/sh /sbin/coredump.sh /data/coredump %e %P %h %s %t"
+
+    # force VM to keep 4096KB of free bytes
+    # default value is 2102(KB)
+    write /proc/sys/vm/min_free_kbytes "4096"
+
+on init
+    # Export FDR button GPIO. Defaults to input with pull-up enabled.
+    write /sys/class/gpio/export "450"
+    chown chrome /sys/class/gpio/gpio450/value
+
+    # Export BASE_PWR_EN (GPIOP_1) GPIO. Defaults to output with pull-down enabled.
+    write /sys/class/gpio/export "451"
+    chown chrome /sys/class/gpio/gpio451/value
+
+    # Export SOC_POGO_USB_EN (GPIOP_5) GPIO. Defaults to output with pull-up enabled.
+    write /sys/class/gpio/export "455"
+    chown chrome /sys/class/gpio/gpio455/value
+
+    # Export USB_SEL (GPIOP_10) GPIO. Defaults to output with pull-down enabled.
+    write /sys/class/gpio/export "460"
+    chown chrome /sys/class/gpio/gpio460/value
+
+    # setup the global environment
+    export PATH /bin:/usr/bin:/sbin:/xbin
+    export LD_LIBRARY_PATH /system/vendor/lib:/system/chrome/lib:/system/lib:/usr/lib:/lib
+    export SECURE_USER_BUILD 1
+    export MALLOC_ARENA_MAX 2
+
+    # Needed by cast_shell to determine where to create the Wayland server
+    # socket. This socket will be used by clients to connect to the server.
+    export XDG_RUNTIME_DIR /tmp/gallium
+    mkdir /tmp/gallium 0770 chrome wayland
+
+    # Creating a centralized folder for shared UDS sockets.
+    # Content of the folder is accesible for grpc (1037) group.
+    # More details: go/castos-centralized-grpc-uds.
+    export GRPC_SOCKET_DIR /tmp/grpc
+    export GRPC_SOCKET_USE_FILE_PERMISSIONS 1
+    mkdir /tmp/grpc 1770 root grpc
+
+    # create mount point
+    mkdir /cache 0700 root chrome
+    mkdir /data 0755 root root
+    mkdir /factory 0755 root chrome
+    mkdir /system 0755 root root
+
+    mkdir /dev/shm
+    mount tmpfs tmpfs /dev/shm nodev noexec nosuid size=192m
+
+    symlink /dev/snd/timer /dev/timer
+
+    # set default volume for playback
+    setprop persist.audio.default_volume 252
+
+    # set cert and key paths
+    export CAST_CLIENT_CERT_CHAIN /system/etc/korlan_ica.crt
+    export CAST_CLIENT_CERT /factory/client.crt
+    export CAST_CLIENT_PRIVKEY /factory/client.key
+
+
+    # Configure lowmemorykiller's thresholds
+    write /sys/module/lowmemorykiller/parameters/adj "0,300"
+    write /sys/module/lowmemorykiller/parameters/minfree "25600,38400"
+
+
+    # set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit 13 40 40
+
+    # Mount the factory partition so that the serial number is available to the
+    # USB set-up.
+    exec /sbin/ubiattach /dev/ubi_ctrl -m 3 -d 3 -b 2
+    mount ubifs ubi3:factory /factory ro nosuid nodev noatime
+
+    # Enable uac2.0 & adb & ffs by default
+    # remove adb for stable-channel in ota_from_target_files (b/209492222)
+    exec /sbin/usb_gadget_control --command=setup --interfaces=UAC2.0,DOCK
+
+    # Initialize and change permissions for UAC & TDM bridge nodes
+    write /sys/module/tdm_bridge/parameters/man_ppm 1
+    write /sys/module/u_audio/parameters/free_run 1
+    write /sys/module/u_audio/parameters/save_ts 1
+    write /sys/module/tdm_bridge/parameters/save_ts 1
+    chown root chrome /proc/tdm_tsb
+    chown root chrome /proc/sof_tsb
+    chown root chrome /sys/module/u_audio/parameters/free_run
+    chown root chrome /sys/module/tdm_bridge/parameters/cur_ppm_steps
+
+    # initialize the deprecated "gadget init" system for iot_usb_dock
+    setprop chrome.usb.init down
+
+    start dockd
+
+on fs
+    # Load device mapper table
+    exec /sbin/dmsetup create system -r /dmtable
+
+    mount squashfs /dev/mapper/system /system ro nodev noatime
+
+    # mount the cache
+    exec /sbin/ubiattach /dev/ubi_ctrl -m 7 -d 7 -b 20
+    mount ubifs ubi7:cache /cache noexec rw nosuid nodev noatime
+    restorecon /cache
+
+    # Note mounting /system needs to be the first thing. Some other commands
+    # might depend on /system binaries.
+    # We must also make sure that these folders have the correct SELINUX
+    # contexts, otherwise the mount command will fail.
+    
+    
+    
+    
+    # After OTA, overlay mixes up the labeling on system.
+    restorecon /system
+
+    # failure safe to re-generate cache if above steps fails
+    exec /bin/sh /sbin/check_and_mount_ubifs.sh 7 cache /cache 20
+
+    # Always ensure that cache is labeled correctly for SELINUX
+    # These files may be unlabeled due to access during
+    # recovery mode.
+    exec /bin/sh /sbin/restorecon_wrapper.sh -R /cache/recovery
+
+    # Set the group of cache mount point to chrome
+    # so update_engine can create files freely, but set
+    # the sticky bit so that it can't mess with any
+    # files it doesn't own.
+    chown root chrome /cache
+    chmod 1775 /cache
+
+    # Mount /data inside of /cache so that we can share a single
+    # partition.  This allows us to spread wear across the
+    # flash better and allows for more flexibility.
+    mkdir /cache/.data 0755 root root
+    exec /bin/mount -o bind /cache/.data /data
+
+    # Mount debugfs
+    mount debugfs none /sys/kernel/debug
+
+    # Mount pstore
+    mount pstore none /sys/fs/pstore kmsg_bytes=8000
+
+    # Once everything is mounted, ensure SELinux labeling is correct on the entire fs.
+    # This only has an affect if SELinux is enabled and was not last boot.
+    # WARNING: No persisted filesystem should be mounted after this point.
+    exec /bin/sh /sbin/check_selinux_fslabels.sh
+
+    # create directory for share
+    mkdir /data/share 0755 root root
+    mkdir /data/share/sntpd 0775 sntpd sntpd
+
+    # create directory for cast receiver package
+    mkdir /data/chrome 0770 chrome chrome
+    mkdir /data/share/chrome 0775 root chrome
+
+    mkdir /data/chrome/tmp 0770 chrome chrome
+    mount tmpfs tmpfs /data/chrome/tmp noexec size=1m
+    chown chrome chrome /data/chrome/tmp
+    chmod 0770 /data/chrome/tmp
+
+    # Directory for local storage of metrics on the dock. There is upper limit of 800KiB
+    # on the storage.
+    mkdir /data/metrics/
+    chown metrics metrics /data/metrics
+    chmod 0730 /data/metrics
+
+    # Directory for libmetrics write - this is too frequent to be written on NAND flash.
+    mkdir /data/share/chrome/metrics 0730 metrics metrics
+    mount tmpfs tmpfs /data/share/chrome/metrics noexec size=512k
+    chown metrics metrics /data/share/chrome/metrics
+    chmod 0730 /data/share/chrome/metrics
+
+    # create directory for cast_receiver metrics
+    mkdir /data/chrome/metrics 0700 chrome chrome
+    mount tmpfs tmpfs /data/chrome/metrics noexec size=1m
+    chown chrome chrome /data/chrome/metrics
+    chmod 0700 /data/chrome/metrics
+
+    # create directory for crash_manager
+    mkdir /data/chrome/minidumps 0770 chrome chrome
+
+    # create directory for non-essential artifacts
+    mkdir /data/chrome/tmp 0770 chrome chrome
+
+    # create directory for update_engine
+    mkdir /data/chrome/update 0770 chrome chrome
+
+
+    exec /bin/sh /sbin/nest_setup.sh
+
+    exec /bin/sh /sbin/collectd_setup.sh
+
+    # exec /bin/sh /setup/mute_setup.sh
+
+    # create directory for widevine
+    mkdir /data/tee 0700 root root
+    symlink /data/tee /tee
+
+    # Create the directory used to hold client auth device credentials
+    mkdir /data/castauth 0770 chrome chrome
+
+    # setup shell history
+    write /data/.ash_history ""
+    symlink /data/.ash_history /.ash_history
+    export HISTSIZE 1000
+
+on post-fs
+    # once everything is setup, no need to modify /
+    mount rootfs rootfs / ro remount
+
+    # network-related
+    exec /bin/ifconfig lo up
+    exec /bin/ifconfig eth0 up
+    exec /bin/alsactl restore -f /etc/asound.state
+    write /etc/hosts "127.0.0.1 localhost"
+    chmod 0644 /etc/hosts
+    write /proc/sys/kernel/hostname Chromecast
+    mkdir /data/property 0700 root root
+
+    # use IPv6 privacy addresses
+    write /proc/sys/net/ipv6/conf/default/use_tempaddr "2"
+    write /proc/sys/net/ipv6/conf/eth0/use_tempaddr "2"
+    write /proc/sys/net/ipv6/conf/wlan0/use_tempaddr "2"
+
+    # set tcp socket buffer size
+    # only max value differs from kernel default
+    write /proc/sys/net/ipv4/tcp_rmem "4096 87380 2097152"
+    write /proc/sys/net/ipv4/tcp_wmem "4096 16384 2097152"
+    write /proc/sys/net/core/rmem_max "1220608"
+    write /proc/sys/net/core/wmem_max "1220608"
+
+    # Enable ICMP echo for broadcast/multicast address
+    write /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts "0"
+
+    # logd: Increase datagram socket's qlen
+    write /proc/sys/net/unix/max_dgram_qlen 600
+
+    # sntpd
+    mkdir /data/sntpd 0700 sntpd sntpd
+
+    # Make kmsg readable/writeable to logd
+    chown root logd /dev/kmsg
+    chown root logd /proc/kmsg
+    chmod 0440 /proc/kmsg
+    chmod 0620 /dev/kmsg
+
+    # dhcpcd creates resolv.conf with wrong umask
+    # fill in Google DNS server in case router is not
+    # able to configure nameserver.
+    exec /bin/sh -c "printf 'nameserver 8.8.8.8\nnameserver 2001:4860:4860::8888' > /etc/resolv.conf"
+    chmod 0644 /etc/resolv.conf
+    chown dhcp dhcp /etc/resolv.conf
+
+    # set defalt timezone to US east, easier to spot issues like b/112091584
+    symlink /usr/share/zoneinfo/America/New_York /data/share/chrome/localtime
+
+    # Clear out temp files from /data. Use /bin/sh for wildcard.
+    exec /bin/sh -c "rm -f /data/tmp.*"
+
+on boot
+    # Enable heap randomization before services start
+    write  /proc/sys/kernel/randomize_va_space "2"
+
+    # Enable it if sysctl.conf is added.
+    # Set kernel configuration
+    # exec /bin/sysctl -p
+
+
+    #TODO(ljchen): Move services that related to /dev/random to a script.
+    #              (see b/73135832). This can unblock the boot process.
+    #              After Amlogic fix, will move them out to init.rc.
+    exec /bin/sh /usr/bin/run_random_device_service.sh
+
+    # Initialize certain properties very early so we can use them.
+    exec /sbin/init_properties
+
+    exec /bin/sh /setup/emmc_retail_setup.sh
+
+    # exec /bin/sh /usr/bin/insert_modules.sh
+
+    # Disable kernel module loading after loading all the necessary modules
+    # insert_modules.sh is used by others so better to disable outside the
+    # scripts
+    write /proc/sys/kernel/modules_disabled 1
+
+    chown root chrome /dev/tee0
+    chmod 0660 /dev/tee0
+    start tee-supplicant
+
+    # demo_updater will return immediately if it is not a retail demo device or usb isn't present.
+    # We want to execute it blocking instead of a service:
+    #  1. To not start boot_animation or cast_shell and interfere with it.
+    #  2. If there are any updates, we won't need cast_shell since device will need reboot.
+    #  3. If there are no updates, it will return quickly and then we can continue other services.
+    exec /bin/demo_updater
+    # demo_metrics will return immediately if it is not a retail demo device or usb isn't present.
+    # It must run before cast_shell runs.
+    exec /bin/demo_metrics
+
+    # Lower volume on power-cycle.
+    # This must run as 'chrome' user since volumes are saved in the home dir
+    exec /bin/sudo -u chrome /bin/logwrapper /chrome/power_cycle_volume_reset --default-dbfs-on-power-cycle=-15
+
+    # start mixer_service
+
+    start logd
+
+    start mojo_broker
+
+    start flash_recovery
+
+    # Enable firewall and set mac address before wifi is up
+    # exec /bin/logwrapper /bin/sh /etc/iptables/enable_iptables.sh
+    # exec /bin/logwrapper /bin/set_macaddr
+    # exec /system/bin/ifconfig wlan0 up
+    # exec /system/bin/iw wlan0 interface add uap0 type managed
+
+    # start panel_service
+    start servicemanager
+
+    # Note: this daemon is expected to call `setprop chrome.usb.init init-me`
+    start iot_usb_dock
+
+    # depends on device certificate in /factory_setting and kernal flags
+    # network_service.sh starts bluetooth and wifi services if necessary.
+    # exec /bin/sh /sbin/network_service.sh
+
+    # thermal_governor avoids overheating by adjusting audio volume and display
+    # brightness. TODO(zhuowang):
+    # 1. enable protection through brightness control
+    # 2. update thermal protection strategy for estelle
+    start thermal_governor
+
+    mkdir /tmp/modular_updater
+    chmod 0770 /tmp/modular_updater
+
+    # start capture_service
+    # start modular_updater
+
+    exec /bin/sh /sbin/try_start_assistant.sh
+
+    # TODO(wzhong): remove chmod after permission is fixed for ubifs.
+    chown root chrome system/chrome/chrome-sandbox
+    chmod 04755 system/chrome/chrome-sandbox
+    chown root chrome system/bin/dumpstate
+    chmod 04750 system/bin/dumpstate
+
+    # start firewall_manager
+
+    # start sntpd
+
+    # allow cast receiver package to run freely
+    # exec /bin/sleep 8
+
+    # start gpio_mute
+
+    # start input_service
+
+    start sysmond
+
+    start console
+
+    start adbd
+    start sshd
+
+    # TODO(ljchen): add monitored service.
+    exec /bin/sh /sbin/watchdog_setup.sh
+    start watchdog
+
+    # Set kernel printk level, only prints EMERG, ALERT, CRIT and ERR.
+    write /proc/sys/kernel/printk "4"
+
+    # Disallow raw tracepoint access for unpriv
+    write /proc/sys/kernel/perf_event_paranoid "0"
+
+    start mountd
+
+    start process_monitor
+
+    start cgroup-metricsd
+
+    # initialize audio amplifier
+    exec /bin/sh /usr/bin/audioamp_init.sh
+
+    start demo_build_info
+
+    # start lmkd
+
+    # set uac and tdm affinities to CPU-1
+    exec /bin/sh /sbin/pcie_affinity.sh
+
+## Daemon processes to be run by init.
+
+# Service class names:
+#   onboot - services that should be started only once, on boot
+#   services - services which may be restarted
+#   <default> - oneshot services which are started explicitly (dhcpd, etc)
+#
+# These class names are used by the debug script /sbin/android, to allow core
+# services to be bounced.
+
+service autolog_logcat /bin/sh -c "sleep 3 && /bin/logcat -f /dev/korlan-logcat"
+    user root
+    oneshot
+    disabled
+
+service autolog /system/bin/autolog -f korlan-logcat -s /dev/ttyS0
+    class service
+    user root
+    onrestart restart autolog_logcat
+    disabled
+
+on property:persist.autolog.enabled=1
+    exec /bin/sleep 1
+    stop console
+    exec /bin/sleep 1
+    start autolog
+    start autolog_logcat
+
+on property:persist.logd.logpersistd.enable=false
+    exec /bin/rm -rf /data/misc/logd
+
+service mixer_service /bin/sh /system/bin/mixer_service.sh
+    capabilities SYS_NICE SYS_RESOURCE IPC_LOCK
+    ioprio rt 3
+    user chrome
+    group chrome audio
+
+service capture_service /bin/sh /system/bin/capture_service.sh
+    capabilities SYS_NICE
+    ioprio rt 3
+    user chrome
+    group chrome audio
+
+
+service thermal_governor /bin/thermal_governor_common
+    logcat
+    class service
+
+service cgroup-metricsd /system/bin/cgroup-metricsd
+    logcat
+    class service
+
+service modular_updater /bin/sh /bin/modular_updater.sh
+    user root
+    class service
+
+service firewall_manager /bin/firewall_manager
+    capabilities NET_RAW NET_ADMIN
+    user chrome
+    class service
+
+on property:chrome.usb.init=init-me
+    exec /sbin/usb_gadget_control --command=enable
+
+service dockd /sbin/dockd
+    critical
+    logcat 524288
+    writepid /sys/fs/cgroup/memcpuacct/iot/cgroup.procs
+    class service
+    user chrome
+    group chrome log audio input
+    socket dockd seqpacket 0666 root chrome
+
+service iot_usb_dock /system/bin/iot_usb_dock.sh
+    critical
+    logcat
+    writepid /sys/fs/cgroup/memcpuacct/iot/cgroup.procs
+    class service
+    capabilities SYS_TIME
+    user chrome
+    group chrome log metrics audio input watchdog
+
+service mojo_broker /system/chrome/bin/standalone_mojo_broker
+    logcat
+    writepid /sys/fs/cgroup/memcpuacct/iot/cgroup.procs
+    capabilities NET_ADMIN
+    class service
+    setenv HOME /data/chrome
+    user chrome
+    group chrome
+
+## Common services
+
+service ueventd /sbin/ueventd
+    class onboot
+    critical
+
+service sntpd /bin/logwrapper /bin/sntpd
+    user root
+
+service boot_complete /bin/sh /sbin/boot_complete.sh
+    class service
+    oneshot
+    disabled
+
+# sshd executable will be removed from the system image for secure
+# builds (e.g. user builds) during the signing process.
+service cast_control /bin/logwrapper /bin/cast_control_server 8002
+    user system
+    group chrome
+    class service
+    disabled
+
+service net_mgr /bin/net_mgr
+    socket net_mgr seqpacket 0660 root net_mgr
+    class service
+
+service dnsmasq /bin/dnsmasq
+    class service
+    disabled
+
+on property:dnsmasq.enable=1
+    start dnsmasq
+
+on property:dnsmasq.enable=0
+    stop dnsmasq
+
+service watchdog /bin/watchdog -F
+    socket watchdog seqpacket 0660 root watchdog
+    class service
+    oneshot
+    disabled
+
+service tee-supplicant /bin/tee-supplicant
+    class service
+
+on property:hostapd.enable=1
+    start hostapd
+
+on property:hostapd.enable=0
+    stop hostapd
+
+service dump_msg /bin/dump_msg
+    class service
+
+service flash_recovery /bin/sh /sbin/flash_recovery.sh
+    class onboot
+    oneshot
+
+service input_service /bin/logwrapper /bin/input_service 1
+    user chrome
+    group chrome panel watchdog
+    class service
+
+service panel_service /bin/panel_service
+    user root
+    group panel watchdog inet
+    socket panel seqpacket 0660 root panel
+    class service
+
+service servicemanager /system/bin/servicemanager
+    capabilities SYS_NICE
+    user system
+    group system
+    critical
+    oneshot
+
+on property:ro.product.release.track=
+    
+
+service collectd /bin/collectd -f
+    user root
+    class service
+    disabled
+
+service sysmond /bin/sysmond
+    class service
+
+service process_monitor /bin/process_monitor \
+  --ebpf_cpu=/system/lib/cpu_ebpf.ko \
+  --ebpf_net=/system/lib/network_ebpf.ko
+    class service
+
+service ipthroughput /bin/logwrapper /bin/ipthroughput
+    oneshot
+
+service mute_service /bin/logwrapper /bin/mute_service
+    user chrome
+    group audio panel
+    class service
+
+service gpio_mute /bin/logwrapper /bin/mute_service_gpio
+    class service
+
+service logd /system/bin/logd
+    class service
+    socket logd stream 666 logd logd
+    socket logdr seqpacket 666 logd logd
+    socket logdw dgram 222 logd logd
+    capabilities SYSLOG AUDIT_CONTROL SETGID SETUID
+    user logd
+    group logd system package_info readproc
+
+on property:persist.logd.logpersistd.enable=true
+    # all exec/services are called with umask(077), so no gain beyond 0700
+    mkdir /data/misc/logd 0700 logd log
+    start logcatd
+
+on property:persist.logd.logpersistd.enable=false
+    stop logcatd
+
+service logcatd /system/bin/logcatd -v threadtime -v printable -v year -f /data/misc/logd/logcat -r 1024
+    class late_start
+    user logd # write to /data/misc/logd
+    group log # read from log daemon
+
+service update_engine /bin/sh /system/bin/update_engine.sh
+    class late_start
+    user root
+    group root system inet
+    disabled
+    seclabel u:r:update_engine
+
+service demo_build_info /bin/demo_build_info
+    oneshot
+
+service assistant /bin/logwrapper /system/chrome/bin/assistant --config_string_file_path=/system/chrome/assistant_bootup_config.json
+    writepid /sys/fs/cgroup/memcpuacct/assistant/cgroup.procs
+    # TODO(esum): Try to remove these capabilities. Don't see why the assistant
+    # needs them but want to match cast_receiver for now to minimize the chance
+    # of a regression.
+    capabilities SYS_NICE SYS_RESOURCE
+    user chrome
+    group chrome inet grpc wayland graphics
+    class service
+    disabled
+
+service lmkd /bin/logwrapper /system/chrome/bin/lmkd
+    user lmkd
+    group lmkd chrome logd
+    capabilities KILL
+    class service
+# Enable zram based on DCS configuration
+on property:persist.zram.enabled=true
+  exec /bin/logwrapper /bin/sh /sbin/enable_zram.sh
+
+on property:persist.zram.enabled=false
+  exec /bin/logwrapper /bin/sh /sbin/disable_zram.sh
