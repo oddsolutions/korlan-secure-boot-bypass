@@ -1,0 +1,18 @@
+assert(!less_than_int(1698745944, getprop("ro.build.date.utc")));
+assert(getprop("ro.hardware") == "korlan-b4");
+show_progress(0.800000, 35);
+write_raw_image(package_extract_file("system.img"), "system");
+show_progress(0.100000, 4);
+write_raw_image(package_extract_file("boot.img"), "boot");
+show_progress(0.100000, 4);
+assert(package_extract_file("tpl.bin", "/tmp/tpl.bin"),
+       run_program("/bin/flash_bootloader", "--tpl=/tmp/tpl.bin"),
+       delete("/tmp/tpl.bin"));
+assert(package_extract_file("bl2.bin", "/tmp/bl2.bin"),
+       run_program("/bin/flash_bootloader", "--bl2=/tmp/bl2.bin"),
+       delete("/tmp/bl2.bin"));
+
+delete_recursive("/cache/.system.overlay");
+delete("/cache/ota.zip");
+delete("/cache/recovery/recovery.log");
+

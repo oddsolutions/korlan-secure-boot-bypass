@@ -1,0 +1,9 @@
+board=korlan-b4
+build-description=386727 korlan-b4 user stable-channel
+build-type=user
+build-version=386727
+post-build=google/korlan/korlan:3.72/OPENMASTER/386727:user/test-keys
+post-timestamp=1698745944
+pre-device=korlan
+release-track=stable-channel
+retail-demo=false
