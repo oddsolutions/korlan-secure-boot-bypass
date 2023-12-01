@@ -1,0 +1,1 @@
+u-boot reloc addr: 0x1ffbf000
